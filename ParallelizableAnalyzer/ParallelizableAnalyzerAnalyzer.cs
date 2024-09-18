@@ -1,4 +1,7 @@
-﻿using System.Collections.Immutable;
+﻿// The following blog entry is useful for understanding the code below:
+// https://blog.emirosmanoski.mk/2020-11-02-Roslyn-Roslyn-Analyzer-Part2/
+
+using System.Collections.Immutable;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -10,13 +13,11 @@ namespace ParallelizableAnalyzer
     [DiagnosticAnalyzer(LanguageNames.CSharp)]
     public class ParallelizableAnalyzerAnalyzer : DiagnosticAnalyzer
     {
-        public const string DiagnosticId = "ParallelizableAnalyzer";
+        public const string DiagnosticId = "PARA01";
 
-        // You can change these strings in the Resources.resx file. If you do not want your analyzer to be localize-able, you can use regular strings for Title and MessageFormat.
-        // See https://github.com/dotnet/roslyn/blob/main/docs/analyzers/Localizing%20Analyzers.md for more on localization
-        private static readonly LocalizableString Title = new LocalizableResourceString(nameof(Resources.AnalyzerTitle), Resources.ResourceManager, typeof(Resources));
-        private static readonly LocalizableString MessageFormat = new LocalizableResourceString(nameof(Resources.AnalyzerMessageFormat), Resources.ResourceManager, typeof(Resources));
-        private static readonly LocalizableString Description = new LocalizableResourceString(nameof(Resources.AnalyzerDescription), Resources.ResourceManager, typeof(Resources));
+        private const string Title = "Method contains async tasks that might be parallelizable";
+        private const string MessageFormat = "Method '{0}' contains async tasks that might be parallelizable";
+        private const string Description = "Consider parallelizing execution of async tasks";
         private const string Category = "Parallelism";
 
         private static readonly DiagnosticDescriptor Rule = new DiagnosticDescriptor(DiagnosticId, Title, MessageFormat, Category, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: Description);
@@ -43,6 +44,8 @@ namespace ParallelizableAnalyzer
         /// <summary>
         /// Analyzes a method code block for await expressions.
         /// </summary>
+        // TODO: ignore some await Task.WhenAll() instances
+        // TODO: ignore awaited tasks whose outputs chain to another awaited task
         private void AnalyzeSyntaxNode(SyntaxNodeAnalysisContext context, SyntaxNode methodCodeBlock)
         {
             SemanticModel semanticModel = context.SemanticModel;
@@ -56,19 +59,40 @@ namespace ParallelizableAnalyzer
                 return;
             }
 
-            // TODO: ignore await Task.WhenAll() instances
-            // TODO: also include when we only have one await expression that is in a loop
-            // TODO: ignore awaited tasks whose outputs chain to another awaited task
+            // We have more than one await expression in the method
             if (allAwaitExpressions.Count > 1)
             {
-                var invocation = node.DescendantNodes().OfType<InvocationExpressionSyntax>().FirstOrDefault();
-                string methodName = invocation?.Expression.ToString();
-                string argumentList = invocation.ArgumentList.Arguments.ToString();
+                ReportDiagnosticOnNode(context, node);
 
-                Diagnostic diagnostic = Diagnostic.Create(Rule, node.GetLocation(), methodName, argumentList);
-
-                context.ReportDiagnostic(diagnostic);
+                return;
             }
+
+            // Also include single awaits located within loops
+            SyntaxNode traversalNode = context.Node.Parent;
+            while (!(traversalNode is MethodDeclarationSyntax))
+            {
+                if (traversalNode is ForStatementSyntax ||
+                    traversalNode is ForEachStatementSyntax ||
+                    traversalNode is WhileStatementSyntax ||
+                    traversalNode is DoStatementSyntax)
+                {
+                    ReportDiagnosticOnNode(context, node);
+                    break;
+                }
+
+                traversalNode = traversalNode.Parent;
+            }
+        }
+
+        private static void ReportDiagnosticOnNode(SyntaxNodeAnalysisContext context, AwaitExpressionSyntax node)
+        {
+            var invocation = node.DescendantNodes().OfType<InvocationExpressionSyntax>().FirstOrDefault();
+            string methodName = invocation?.Expression.ToString();
+            string argumentList = invocation.ArgumentList.Arguments.ToString();
+
+            Diagnostic diagnostic = Diagnostic.Create(Rule, node.GetLocation(), methodName, argumentList);
+
+            context.ReportDiagnostic(diagnostic);
         }
     }
 }

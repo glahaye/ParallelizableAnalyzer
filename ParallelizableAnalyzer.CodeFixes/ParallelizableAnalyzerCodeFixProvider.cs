@@ -15,6 +15,8 @@ namespace ParallelizableAnalyzer
     [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(ParallelizableAnalyzerCodeFixProvider)), Shared]
     public class ParallelizableAnalyzerCodeFixProvider : CodeFixProvider
     {
+        private const string CodeFixTitle = "Parallelize tasks";
+
         public sealed override ImmutableArray<string> FixableDiagnosticIds
         {
             get { return ImmutableArray.Create(ParallelizableAnalyzerAnalyzer.DiagnosticId); }
@@ -30,7 +32,6 @@ namespace ParallelizableAnalyzer
         {
             var root = await context.Document.GetSyntaxRootAsync(context.CancellationToken).ConfigureAwait(false);
 
-            // TODO: Replace the following code with your own analysis, generating a CodeAction for each fix to suggest
             var diagnostic = context.Diagnostics.First();
             var diagnosticSpan = diagnostic.Location.SourceSpan;
 
@@ -40,12 +41,13 @@ namespace ParallelizableAnalyzer
             // Register a code action that will invoke the fix.
             context.RegisterCodeFix(
                 CodeAction.Create(
-                    title: CodeFixResources.CodeFixTitle,
+                    title: CodeFixTitle,
                     createChangedSolution: c => MakeUppercaseAsync(context.Document, declaration, c),
-                    equivalenceKey: nameof(CodeFixResources.CodeFixTitle)),
+                    equivalenceKey: nameof(CodeFixTitle)),
                 diagnostic);
         }
 
+        // TODO: change this to an actual fix
         private async Task<Solution> MakeUppercaseAsync(Document document, TypeDeclarationSyntax typeDecl, CancellationToken cancellationToken)
         {
             // Compute new uppercase name.

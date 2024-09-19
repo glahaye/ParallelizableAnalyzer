@@ -1,0 +1,10 @@
+﻿[*.cs]
+
+# CA1062: Validate arguments of public methods
+dotnet_diagnostic.CA1062.severity = silent
+
+# IDE0130: Namespace does not match folder structure
+dotnet_diagnostic.IDE0130.severity = silent
+
+# RS2008: Enable analyzer release tracking
+dotnet_diagnostic.RS2008.severity = silent

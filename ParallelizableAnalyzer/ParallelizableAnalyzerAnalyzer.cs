@@ -17,10 +17,10 @@ namespace ParallelizableAnalyzer
 
         private const string Title = "Method contains async tasks that might be parallelizable";
         private const string MessageFormat = "Method '{0}' contains async tasks that might be parallelizable";
-        private const string Description = "Consider parallelizing execution of async tasks";
+        private const string Description = "Consider parallelizing execution of async tasks.";
         private const string Category = "Parallelism";
 
-        private static readonly DiagnosticDescriptor Rule = new DiagnosticDescriptor(DiagnosticId, Title, MessageFormat, Category, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: Description);
+        private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, Category, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: Description);
 
         public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get { return ImmutableArray.Create(Rule); } }
 
@@ -46,7 +46,7 @@ namespace ParallelizableAnalyzer
         /// </summary>
         // TODO: ignore some await Task.WhenAll() instances
         // TODO: ignore awaited tasks whose outputs chain to another awaited task
-        private void AnalyzeSyntaxNode(SyntaxNodeAnalysisContext context, SyntaxNode methodCodeBlock)
+        private static void AnalyzeSyntaxNode(SyntaxNodeAnalysisContext context, SyntaxNode methodCodeBlock)
         {
             SemanticModel semanticModel = context.SemanticModel;
             AwaitExpressionSyntax node = (AwaitExpressionSyntax)context.Node;
@@ -69,7 +69,7 @@ namespace ParallelizableAnalyzer
 
             // Also include single awaits located within loops
             SyntaxNode traversalNode = context.Node.Parent;
-            while (!(traversalNode is MethodDeclarationSyntax))
+            while (traversalNode is not MethodDeclarationSyntax)
             {
                 if (traversalNode is ForStatementSyntax ||
                     traversalNode is ForEachStatementSyntax ||

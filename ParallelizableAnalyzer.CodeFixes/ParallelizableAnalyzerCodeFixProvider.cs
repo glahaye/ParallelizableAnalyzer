@@ -48,7 +48,11 @@ namespace ParallelizableAnalyzer
         }
 
         // TODO: change this to an actual fix
-        private async Task<Solution> MakeUppercaseAsync(Document document, TypeDeclarationSyntax typeDecl, CancellationToken cancellationToken)
+        // Generic fix:
+        // - Replace awaits with additions to a list of tasks to await on
+        // - Add Task.WhenAll() for that list
+        // - For tasks which returned values, do a second await to get values
+        private static async Task<Solution> MakeUppercaseAsync(Document document, TypeDeclarationSyntax typeDecl, CancellationToken cancellationToken)
         {
             // Compute new uppercase name.
             var identifierToken = typeDecl.Identifier;

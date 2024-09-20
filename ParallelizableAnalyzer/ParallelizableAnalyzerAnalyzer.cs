@@ -8,91 +8,110 @@ using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
-namespace ParallelizableAnalyzer
+namespace ParallelizableAnalyzer;
+
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public class ParallelizableAnalyzerAnalyzer : DiagnosticAnalyzer
 {
-    [DiagnosticAnalyzer(LanguageNames.CSharp)]
-    public class ParallelizableAnalyzerAnalyzer : DiagnosticAnalyzer
+    public const string DiagnosticId = "PARA01";
+
+    private const string Title = "Method contains async tasks that might be parallelizable";
+    private const string MessageFormat = "Method '{0}' contains async tasks that might be parallelizable";
+    private const string Description = "Consider parallelizing execution of async tasks.";
+    private const string Category = "Parallelism";
+
+    private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, Category, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: Description);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => [Rule];
+
+    public override void Initialize(AnalysisContext context)
     {
-        public const string DiagnosticId = "PARA01";
+        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+        context.EnableConcurrentExecution();
 
-        private const string Title = "Method contains async tasks that might be parallelizable";
-        private const string MessageFormat = "Method '{0}' contains async tasks that might be parallelizable";
-        private const string Description = "Consider parallelizing execution of async tasks.";
-        private const string Category = "Parallelism";
-
-        private static readonly DiagnosticDescriptor Rule = new(DiagnosticId, Title, MessageFormat, Category, DiagnosticSeverity.Warning, isEnabledByDefault: true, description: Description);
-
-        public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics { get { return ImmutableArray.Create(Rule); } }
-
-        public override void Initialize(AnalysisContext context)
+        context.RegisterCodeBlockStartAction<SyntaxKind>(analysisContext =>
         {
-            context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
-            context.EnableConcurrentExecution();
-
-            context.RegisterCodeBlockStartAction<SyntaxKind>(analysisContext =>
+            if (analysisContext.OwningSymbol.Kind != SymbolKind.Method)
             {
-                if (analysisContext.OwningSymbol.Kind != SymbolKind.Method)
-                {
-                    return;
-                }
+                return;
+            }
 
-                analysisContext.RegisterSyntaxNodeAction(
-                   ctx => AnalyzeSyntaxNode(ctx, analysisContext.CodeBlock), SyntaxKind.AwaitExpression);
-            });
+            analysisContext.RegisterSyntaxNodeAction(
+               ctx => AnalyzeSyntaxNode(ctx, analysisContext.CodeBlock), SyntaxKind.AwaitExpression);
+        });
+    }
+
+    /// <summary>
+    /// Analyzes a method code block for await expressions.
+    /// </summary>
+    // TODO: ignore some await Task.WhenAll() instances
+    // TODO: ignore awaited tasks whose outputs chain to another awaited task
+    private static void AnalyzeSyntaxNode(SyntaxNodeAnalysisContext context, SyntaxNode methodCodeBlock)
+    {
+        SemanticModel semanticModel = context.SemanticModel;
+        AwaitExpressionSyntax node = (AwaitExpressionSyntax)context.Node;
+
+        var allAwaitExpressions = methodCodeBlock.DescendantNodes().OfType<AwaitExpressionSyntax>().ToList();
+
+        // Only do the analysis and potentially report the method in diagnostics once per method.
+        // Otherwise, we could report the same method multiple times.
+        if (node != allAwaitExpressions[0])
+        {
+            return;
         }
 
-        /// <summary>
-        /// Analyzes a method code block for await expressions.
-        /// </summary>
-        // TODO: ignore some await Task.WhenAll() instances
-        // TODO: ignore awaited tasks whose outputs chain to another awaited task
-        private static void AnalyzeSyntaxNode(SyntaxNodeAnalysisContext context, SyntaxNode methodCodeBlock)
+        // We have more than one await expression in the method
+        if (allAwaitExpressions.Count > 1)
         {
-            SemanticModel semanticModel = context.SemanticModel;
-            AwaitExpressionSyntax node = (AwaitExpressionSyntax)context.Node;
+            ReportDiagnosticOnEnclosingMethodNode(context, node);
 
-            var allAwaitExpressions = methodCodeBlock.DescendantNodes().OfType<AwaitExpressionSyntax>().ToList();
+            return;
+        }
 
-            // There are no await expressions in the method - We are done here
-            if (allAwaitExpressions.Count == 0)
-            {
-                return;
-            }
-
-            // We have more than one await expression in the method
-            if (allAwaitExpressions.Count > 1)
-            {
-                ReportDiagnosticOnNode(context, node);
-
-                return;
-            }
-
-            // Also include single awaits located within loops
-            SyntaxNode traversalNode = context.Node.Parent;
-            while (traversalNode is not MethodDeclarationSyntax)
+        // Also mark methods where we have single awaits located within loops
+        foreach (AwaitExpressionSyntax awaitExpression in allAwaitExpressions)
+        {
+            SyntaxNode traversalNode = awaitExpression.Parent;
+            while (traversalNode is not MethodDeclarationSyntax &&
+                   traversalNode is not ConstructorDeclarationSyntax) // Yes, some people await in constructors
             {
                 if (traversalNode is ForStatementSyntax ||
                     traversalNode is ForEachStatementSyntax ||
                     traversalNode is WhileStatementSyntax ||
                     traversalNode is DoStatementSyntax)
                 {
-                    ReportDiagnosticOnNode(context, node);
-                    break;
+                    ReportDiagnosticOnEnclosingMethodNode(context, node);
+                    return;
                 }
 
                 traversalNode = traversalNode.Parent;
             }
         }
+    }
 
-        private static void ReportDiagnosticOnNode(SyntaxNodeAnalysisContext context, AwaitExpressionSyntax node)
+    private static void ReportDiagnosticOnEnclosingMethodNode(SyntaxNodeAnalysisContext context, SyntaxNode node)
+    {
+        while (node is not MethodDeclarationSyntax &&
+               node is not ConstructorDeclarationSyntax)
         {
-            var invocation = node.DescendantNodes().OfType<InvocationExpressionSyntax>().FirstOrDefault();
-            string methodName = invocation?.Expression.ToString();
-            string argumentList = invocation.ArgumentList.Arguments.ToString();
-
-            Diagnostic diagnostic = Diagnostic.Create(Rule, node.GetLocation(), methodName, argumentList);
-
-            context.ReportDiagnostic(diagnostic);
+            node = node.Parent;
         }
+
+        string methodName = null;
+        Location location = null;
+        if (node is MethodDeclarationSyntax methodDeclarationNode)
+        {
+            methodName = methodDeclarationNode.Identifier.ValueText;
+            location = methodDeclarationNode.Identifier.GetLocation();
+        }
+        else if (node is ConstructorDeclarationSyntax constructorDeclarationNode)
+        {
+            methodName = constructorDeclarationNode.Identifier.ValueText;
+            location = constructorDeclarationNode.Identifier.GetLocation();
+        }
+
+        Diagnostic diagnostic = Diagnostic.Create(Rule, location, methodName);
+
+        context.ReportDiagnostic(diagnostic);
     }
 }

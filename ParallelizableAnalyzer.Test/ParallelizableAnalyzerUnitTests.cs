@@ -5,23 +5,23 @@ using VerifyCS = ParallelizableAnalyzer.Test.CSharpCodeFixVerifier<
     ParallelizableAnalyzer.ParallelizableAnalyzerAnalyzer,
     ParallelizableAnalyzer.ParallelizableAnalyzerCodeFixProvider>;
 
-namespace ParallelizableAnalyzer.Test
+namespace ParallelizableAnalyzer.Test;
+
+[TestClass]
+public class ParallelizableAnalyzerUnitTest
 {
-    [TestClass]
-    public class ParallelizableAnalyzerUnitTest
+    [TestMethod]
+    public async Task NoDiagnosticsOnEmptyInputAsync()
     {
-        [TestMethod]
-        public async Task NoDiagnosticsOnEmptyInputAsync()
-        {
-            var test = @"";
+        var test = @"";
 
-            await VerifyCS.VerifyAnalyzerAsync(test);
-        }
+        await VerifyCS.VerifyAnalyzerAsync(test);
+    }
 
-        [TestMethod]
-        public async Task NoDiagnosticsOnMethodWithSingleAwaitAsync()
-        {
-            var test = @"
+    [TestMethod]
+    public async Task NoDiagnosticsOnMethodWithSingleAwaitAsync()
+    {
+        var test = @"
     using System;
     using System.Threading.Tasks;
 
@@ -36,13 +36,13 @@ namespace ParallelizableAnalyzer.Test
         }
     }";
 
-            await VerifyCS.VerifyAnalyzerAsync(test);
-        }
+        await VerifyCS.VerifyAnalyzerAsync(test);
+    }
 
-        [TestMethod]
-        public async Task DiagnosticsOnMethodWithTwoAwaitsAsync()
-        {
-            var test = @"
+    [TestMethod]
+    public async Task DiagnosticsOnMethodWithTwoAwaitsAsync()
+    {
+        var test = @"
     using System;
     using System.Threading.Tasks;
 
@@ -57,19 +57,15 @@ namespace ParallelizableAnalyzer.Test
             }
         }
     }";
-            DiagnosticResult[] expected = new[]
-            {
-                VerifyCS.Diagnostic().WithSpan(11, 17, 11, 38).WithArguments("Task.Delay", "100"),
-                VerifyCS.Diagnostic().WithSpan(12, 17, 12, 38).WithArguments("Task.Delay", "200"),
-            };
+        DiagnosticResult expected = VerifyCS.Diagnostic().WithSpan(9, 31, 9, 41).WithArguments("TestMethod");
 
-            await VerifyCS.VerifyAnalyzerAsync(test, expected);
-        }
+        await VerifyCS.VerifyAnalyzerAsync(test, expected);
+    }
 
-        [TestMethod]
-        public async Task DiagnosticsOnAwaitsWithinForAsync()
-        {
-            var test = @"
+    [TestMethod]
+    public async Task DiagnosticsOnAwaitWithinForAsync()
+    {
+        var test = @"
     using System;
     using System.Threading.Tasks;
 
@@ -86,15 +82,15 @@ namespace ParallelizableAnalyzer.Test
             }
         }
     }";
-            DiagnosticResult expected = VerifyCS.Diagnostic().WithLocation(13, 21).WithArguments("Task.Delay", "100");
+        DiagnosticResult expected = VerifyCS.Diagnostic().WithSpan(9, 31, 9, 41).WithArguments("TestMethod");
 
-            await VerifyCS.VerifyAnalyzerAsync(test, expected);
-        }
+        await VerifyCS.VerifyAnalyzerAsync(test, expected);
+    }
 
-        [TestMethod]
-        public async Task DiagnosticsOnAwaitsWithinForeachAsync()
-        {
-            var test = @"
+    [TestMethod]
+    public async Task DiagnosticsOnAwaitWithinForeachAsync()
+    {
+        var test = @"
     using System;
     using System.Threading.Tasks;
 
@@ -113,15 +109,15 @@ namespace ParallelizableAnalyzer.Test
             }
         }
     }";
-            DiagnosticResult expected = VerifyCS.Diagnostic().WithLocation(15, 21).WithArguments("Task.Delay", "100");
+        DiagnosticResult expected = VerifyCS.Diagnostic().WithSpan(11, 31, 11, 41).WithArguments("TestMethod");
 
-            await VerifyCS.VerifyAnalyzerAsync(test, expected);
-        }
+        await VerifyCS.VerifyAnalyzerAsync(test, expected);
+    }
 
-        [TestMethod]
-        public async Task DiagnosticsOnAwaitsWithinWhileAsync()
-        {
-            var test = @"
+    [TestMethod]
+    public async Task DiagnosticsOnAwaitWithinWhileAsync()
+    {
+        var test = @"
     using System;
     using System.Threading.Tasks;
 
@@ -138,15 +134,15 @@ namespace ParallelizableAnalyzer.Test
             }
         }
     }";
-            DiagnosticResult expected = VerifyCS.Diagnostic().WithLocation(13, 21).WithArguments("Task.Delay", "100");
+        DiagnosticResult expected = VerifyCS.Diagnostic().WithSpan(9, 31, 9, 41).WithArguments("TestMethod");
 
-            await VerifyCS.VerifyAnalyzerAsync(test, expected);
-        }
+        await VerifyCS.VerifyAnalyzerAsync(test, expected);
+    }
 
-        [TestMethod]
-        public async Task DiagnosticsOnAwaitsWithinDoWhileForAsync()
-        {
-            var test = @"
+    [TestMethod]
+    public async Task DiagnosticsOnAwaitWithinDoWhileForAsync()
+    {
+        var test = @"
     using System;
     using System.Threading.Tasks;
 
@@ -164,15 +160,15 @@ namespace ParallelizableAnalyzer.Test
             }
         }
     }";
-            DiagnosticResult expected = VerifyCS.Diagnostic().WithLocation(13, 21).WithArguments("Task.Delay", "100");
+        DiagnosticResult expected = VerifyCS.Diagnostic().WithSpan(9, 31, 9, 41).WithArguments("TestMethod");
 
-            await VerifyCS.VerifyAnalyzerAsync(test, expected);
-        }
+        await VerifyCS.VerifyAnalyzerAsync(test, expected);
+    }
 
-        [TestMethod]
-        public async Task DiagnosticsOnAwaitsBothInAndOutOfLoops()
-        {
-            var test = @"
+    [TestMethod]
+    public async Task DiagnosticsOnAwaitsBothInAndOutOfLoops()
+    {
+        var test = @"
     using System;
     using System.Threading.Tasks;
 
@@ -192,15 +188,64 @@ namespace ParallelizableAnalyzer.Test
             }
         }
     }";
+        DiagnosticResult expected = VerifyCS.Diagnostic().WithSpan(9, 31, 9, 41).WithArguments("TestMethod");
 
-            DiagnosticResult[] expected = new[]
+        await VerifyCS.VerifyAnalyzerAsync(test, expected);
+    }
+
+    [TestMethod]
+    public async Task DiagnosticsOnAwaitWithinLoopInConstructorAsync()
+    {
+        var test = @"
+    using System;
+    using System.Threading.Tasks;
+
+    namespace TestNamespace
+    {
+        class TestClass
+        {
+            public TestClass()
             {
-                VerifyCS.Diagnostic().WithSpan(11, 17, 11, 38).WithArguments("Task.Delay", "100"),
-                VerifyCS.Diagnostic().WithSpan(15, 21, 15, 42).WithArguments("Task.Delay", "200"),
-                VerifyCS.Diagnostic().WithSpan(16, 21, 16, 42).WithArguments("Task.Delay", "300"),
-            };
-
-            await VerifyCS.VerifyAnalyzerAsync(test, expected);
+                Task.Run(async () =>
+                {
+                    while (true)
+                    {
+                        await Task.Delay(100);
+                    }
+                });
+            }
         }
+    }";
+        DiagnosticResult expected = VerifyCS.Diagnostic().WithSpan(9, 20, 9, 29).WithArguments("TestClass");
+
+        await VerifyCS.VerifyAnalyzerAsync(test, expected);
+    }
+
+    [TestMethod]
+    public async Task DiagnosticsOnConstructorWithTwoAwaitsAsync()
+    {
+        var test = @"
+    using System;
+    using System.Threading.Tasks;
+
+    namespace TestNamespace
+    {
+        class TestClass
+        {
+            public TestClass()
+            {
+                Task.Run(async () =>
+                {
+                    while (true)
+                    {
+                        await Task.Delay(100);
+                    }
+                });
+            }
+        }
+    }";
+        DiagnosticResult expected = VerifyCS.Diagnostic().WithSpan(9, 20, 9, 29).WithArguments("TestClass");
+
+        await VerifyCS.VerifyAnalyzerAsync(test, expected);
     }
 }
